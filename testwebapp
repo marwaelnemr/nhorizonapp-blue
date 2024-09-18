@@ -1,0 +1,32 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import NoSuchElementException
+import time
+import os
+chrome_options = Options()
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--disable-extensions")
+
+service = Service('/usr/bin/chromedriver')  # Update the path as needed
+driver = webdriver.Chrome(service=service, options=chrome_options)
+
+# Your automation code here
+try:
+    # Open the index.html file
+    driver.get("http://localhost")
+    time.sleep(2)
+    title = driver.title
+    expected_title = "NHorizonApp"
+
+    # Test the title
+    if title == expected_title:
+        print(f"Test Passed: Title is '{title}'")
+    else:
+        print(f"Test Failed: Expected title '{expected_title}', but got '{title}'")
+
+finally:
+    # Close the browser
+    driver.quit()

@@ -1,0 +1,109 @@
+---
+- name: provision and configure NH resources on AWS
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    awsregion: eu-west-1
+    nhcidr: 10.0.0.0/16
+    nhsubnet1: 10.0.1.0/24
+
+  tasks:
+    - name: Create NH VPC
+      amazon.aws.ec2_vpc_net:
+        name: nh_frontend_VPC
+        cidr_block: "{{ nhcidr }}"
+        region: "{{ awsregion }}"
+        tags:
+          app: nhfe
+        state: present
+      register: nhvpc
+
+    - name: Create Subnet
+      amazon.aws.ec2_vpc_subnet:
+        state: present
+        vpc_id: "{{ nhvpc.vpc.id }}"
+        cidr: "{{ nhsubnet1 }}"
+        map_public: true
+        tags:
+            Name: feapp-subnet
+            app: nhfe
+      register: nhsubnet
+
+    - name: Create Internet Gateway
+      amazon.aws.ec2_vpc_igw:
+        vpc_id: "{{ nhvpc.vpc.id }}"
+        state: present
+        tags:
+            app: nhfe
+      register: NH_igw
+
+    - name: Create Route Table
+      amazon.aws.ec2_vpc_route_table:
+        vpc_id: "{{ nhvpc.vpc.id }}"
+        tags:
+          app: nhfe
+        subnets:
+        - "{{ nhsubnet.subnet.id }}"
+        routes:
+        - dest: 0.0.0.0/0
+          gateway_id: "{{ NH_igw.gateway_id }}"
+
+
+    - name: Create Security Group
+      amazon.aws.ec2_group:
+        name: nh-fe-sg
+        description: Security Group for NH frontend
+        vpc_id: "{{ nhvpc.vpc.id }}"
+        region: "{{ awsregion }}"
+        rules:
+          - proto: tcp
+            ports:
+                - 80 # NH frontend
+            cidr_ip: "{{ nhcidr }}"
+          - proto: tcp
+            ports:
+                - 22 # ssh port
+            cidr_ip: 0.0.0.0/0
+        tags:
+            app: nhfe
+        state: present
+      register: nhsg
+
+    - name: Create key pair
+      amazon.aws.ec2_key:
+        name: nh-keys
+        key_material: "{{ lookup('file', '/root/.ssh/id_rsa.pub') }}"
+        tags:
+            app: nhfe
+      register: key_pair
+                                           
+    - name: Create EC2 instances
+      amazon.aws.ec2_instance:
+        state: running
+        instance_type: t2.micro
+        image_id: ami-03cc8375791cb8bcf
+        count: 2
+        region: "{{ awsregion }}"
+        network:
+          assign_public_ip: true
+        security_group: "{{ nhsg.group_name }}"
+        vpc_subnet_id: "{{ nhsubnet.subnet.id }}"
+        key_name: "{{ key_pair.key.name }}"
+        tags: 
+          app: nhfe
+      register: running_machines
+    - name: add to host group
+      add_host:
+        hostname: "{{ item.public_ip }}"
+        groupname: just_this
+      loop: "{{ run_machines.instances}}" 
+
+    - name: wait and delegate!
+      delegate_to:  "{{ item.public_ip }}"
+      wait_for_connection:
+        delay: 60
+        timeout: 320
+      loop: "{{ run_machines.instances}}"
+   
+  -hosts: just_this
