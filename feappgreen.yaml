@@ -1,0 +1,81 @@
+- name: Frontend App setup
+  become: yes
+  hosts: all
+  vars:
+    - webappdir: /app
+    - webx: /home/m/nhsitegreen.tar
+    - port_num: 80
+    - apache_config: /home/m/apache.conf.1
+    - phprepo: /home/m/repo.list
+
+  tasks:
+    
+    - name: Copy php repo file
+      ansible.builtin.copy:
+        src: "{{ phprepo }}"
+        dest: /etc/apt/sources.list.d/ondrej-ubuntu-php-noble.sources
+        owner: root
+        group: root
+        mode: 640
+
+    - name: Installing php 8.2
+      apt: name=software-properties-common
+    
+    - name: "Update repo"
+      apt: update_cache=yes
+
+    - name: Install PHP 8.2
+      apt: name=php8.2 state=present
+
+    - name: install lamp stack
+      apt:
+        pkg:
+          - php-mysql
+          - php-curl
+          - php-json
+          - php-cgi
+          - php-gd
+          - php-mbstring
+          - php-zip
+          - php-xmlrpc
+          - php-soap
+          - php-intl
+          - php-cgi
+          - libapache2-mod-php8.2
+          - libxslt-dev
+        state: present
+        update_cache: yes
+
+    - name: install apache2
+      apt:
+        name: apache2
+        update_cache: yes
+        state: latest
+
+    - name: Extract website
+      become: yes
+      unarchive:
+        src: "{{ webx }}"
+        dest: "/"
+        owner: www-data
+        group: www-data
+        mode: 0755
+    
+    - name: Copy file with owner and permissions
+      template:
+        src: /webfiles/horizons.conf.j2
+        dest: /etc/apache2/sites-enabled/horizons.conf
+
+    - name: Remove file
+      file:
+        path: "/etc/apache2/sites-available/000-default.conf"
+        state: absent
+    
+    - name: Start Apache service
+      ansible.builtin.service:
+        name: apache2
+        state: restarted
+        enabled: yes
+
+         
+

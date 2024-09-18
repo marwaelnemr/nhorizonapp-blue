@@ -60,7 +60,7 @@
           - proto: tcp
             ports:
                 - 80 # NH frontend
-            cidr_ip: "{{ nhcidr }}"
+            cidr_ip: 0.0.0.0/0
           - proto: tcp
             ports:
                 - 22 # ssh port
@@ -80,10 +80,11 @@
                                            
     - name: Create EC2 instances
       amazon.aws.ec2_instance:
+        wait: true
         state: running
         instance_type: t2.micro
         image_id: ami-03cc8375791cb8bcf
-        count: 2
+        count: 1
         region: "{{ awsregion }}"
         network:
           assign_public_ip: true
@@ -91,19 +92,30 @@
         vpc_subnet_id: "{{ nhsubnet.subnet.id }}"
         key_name: "{{ key_pair.key.name }}"
         tags: 
+          Name: feblue
           app: nhfe
-      register: running_machines
-    - name: add to host group
-      add_host:
-        hostname: "{{ item.public_ip }}"
-        groupname: just_this
-      loop: "{{ run_machines.instances}}" 
+      register: ec2
 
-    - name: wait and delegate!
-      delegate_to:  "{{ item.public_ip }}"
-      wait_for_connection:
-        delay: 60
-        timeout: 320
-      loop: "{{ run_machines.instances}}"
-   
-  -hosts: just_this
+    - name: Create EC2 instances
+      amazon.aws.ec2_instance:
+        wait: true
+        tags: ignorethis  
+        state: running
+        instance_type: t2.micro
+        image_id: ami-03cc8375791cb8bcf
+        count: 1
+        region: "{{ awsregion }}"
+        network:
+          assign_public_ip: true
+        security_group: "{{ nhsg.group_name }}"
+        vpc_subnet_id: "{{ nhsubnet.subnet.id }}"
+        key_name: "{{ key_pair.key.name }}"
+        tags:
+          Name: fegreen
+          app: nhfe
+      register: ec2
+ 
+
+
+
+
